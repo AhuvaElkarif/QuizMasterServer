@@ -1,0 +1,45 @@
+
+## Ignore Visual Studio temporary files, build results, and
+## user-specific files
+
+# Build results
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Mono Auto Generated Files
+mono_crash.*
+
+# Build results of VS2019/VS2022
+*.dll
+*.exe
+*.app
+*.appx
+*.msi
+*.nupkg
+
+# .NET Core
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# ASP.NET Scaffolding
+ScaffoldingReadMe.txt
+
+# Visual Studio for Mac
+.vscode/
+.idea/
+
+# Rider
+*.sln.iml
+
+# Others
+*.vs/
+*.db
+‪nbu-psch-rby‬‏
