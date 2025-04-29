@@ -1,62 +1,78 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using MongoDB.Driver;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
+using QuizMaster.Services;
+using Swashbuckle.AspNetCore.Annotations;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.Linq;
 using System.Threading.Tasks;
+using System.Security.Claims;
+using QuizMaster.Models;
+using QuizMaster.DTO;
 
-[Route("api/[controller]")]
-[ApiController]
-public class QuestionController : ControllerBase
+namespace QuizMaster.Controllers
 {
-    private readonly IMongoCollection<Question> _questionsCollection;
-
-    public QuestionController(MongoDBService mongoDBService)
+    [ApiController]
+    [Route("questions")]
+    [Authorize(Roles = "Teacher")]
+    public class QuestionsController : ControllerBase
     {
-        _questionsCollection = mongoDBService.GetCollection<Question>("Questions");
-    }
+        private readonly QuestionService _questionService;
 
-    [HttpGet]
-    public async Task<IActionResult> GetAllQuestions()
-    {
-        var questions = await _questionsCollection.Find(_ => true).ToListAsync();
-        return Ok(questions);
-    }
+        public QuestionsController(QuestionService questionService)
+        {
+            _questionService = questionService;
+        }
 
-    [HttpGet("{id}")]
-    public async Task<IActionResult> GetQuestion(string id)
-    {
-        var question = await _questionsCollection.Find(q => q.Id == id).FirstOrDefaultAsync();
+        [HttpGet]
+        public async Task<ActionResult<List<Question>>> GetAll()
+        {
+            var questions = await _questionService.GetAllAsync();
+            return Ok(questions);
+        }
 
-        if (question == null)
-            return NotFound();
+        [HttpGet("{id}")]
+        public async Task<ActionResult<Question>> GetById(string id)
+        {
+            var question = await _questionService.GetByIdAsync(id);
 
-        return Ok(question);
-    }
+            if (question == null)
+            {
+                return NotFound();
+            }
 
-    [HttpPost]
-    public async Task<IActionResult> CreateQuestion(Question question)
-    {
-        await _questionsCollection.InsertOneAsync(question);
-        return CreatedAtAction(nameof(GetQuestion), new { id = question.Id }, question);
-    }
+            return Ok(question);
+        }
 
-    [HttpPut("{id}")]
-    public async Task<IActionResult> UpdateQuestion(string id, Question questionIn)
-    {
-        var result = await _questionsCollection.ReplaceOneAsync(q => q.Id == id, questionIn);
+        [HttpPost]
+        public async Task<ActionResult<Question>> Create([FromBody] QuestionCreateRequest questionRequest)
+        {
+            var teacherId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var question = await _questionService.CreateAsync(questionRequest, teacherId);
+            return CreatedAtAction(nameof(GetById), new { id = question.Id }, question);
+        }
 
-        if (result.ModifiedCount == 0)
-            return NotFound();
+        [HttpPut("{id}")]
+        public async Task<ActionResult<Question>> Update(string id, [FromBody] QuestionUpdateRequest questionRequest)
+        {
+            try
+            {
+                var question = await _questionService.UpdateAsync(id, questionRequest);
+                return Ok(question);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
 
-        return NoContent();
-    }
-
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteQuestion(string id)
-    {
-        var result = await _questionsCollection.DeleteOneAsync(q => q.Id == id);
-
-        if (result.DeletedCount == 0)
-            return NotFound();
-
-        return NoContent();
+        [HttpDelete("{id}")]
+        public async Task<ActionResult> Delete(string id)
+        {
+            await _questionService.DeleteAsync(id);
+            return NoContent();
+        }
     }
 }
