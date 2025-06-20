@@ -191,7 +191,8 @@ namespace ExamManagementMongoApi.Controllers
                         Score = result.Score,
                         Feedback = result.Feedback,
                         ExamTitle = exam.Title,
-                        ExamId = result.ExamId,
+                        ExamAttemptId = result.ExamAttemptId.ToString(),
+                        ExamId = result.ExamId.ToString(),
                         StartedAt = attempt.StartedAt,
                         SubmittedAt = attempt.SubmittedAt
                     });
@@ -206,6 +207,45 @@ namespace ExamManagementMongoApi.Controllers
                 Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 return StatusCode(500, new { error = "Internal server error", message = ex.Message });
             }
+        }
+        [HttpGet("{examAttemptId:length(24)}/answers")]
+
+        public async Task<ActionResult<List<AnswerDto>>> GetAnswersForAttempt(string examAttemptId)
+
+        {
+
+            if (!ObjectId.TryParse(examAttemptId, out var attemptObjectId))
+
+                return BadRequest("Invalid examAttemptId format");
+
+
+            var filter = Builders<Answer>.Filter.Eq(a => a.ExamAttemptId, attemptObjectId);
+
+            var answers = await _db.Answers.Find(filter).ToListAsync();
+
+
+            // Map to DTO for response
+
+            var result = new List<AnswerDto>();
+
+            foreach (var a in answers)
+
+            {
+
+                result.Add(new AnswerDto()
+                {
+
+                    QuestionId = a.QuestionId.ToString(),
+
+                    AnswerValues = a.AnswerValues ?? new List<string>()
+
+                });
+
+            }
+
+
+            return Ok(result);
+
         }
     }
 }

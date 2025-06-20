@@ -1,12 +1,16 @@
-﻿using QuizMasterServer.Data;
-using QuizMasterServer.Models;
+﻿using Amazon.Runtime.Internal.Util;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
+using QuizMasterServer.Data;
+using QuizMasterServer.DTOs;
+using QuizMasterServer.Models;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using System.Linq;
 
 namespace ExamManagementMongoApi.Controllers
 {
@@ -29,36 +33,92 @@ namespace ExamManagementMongoApi.Controllers
         }
 
         [HttpGet("ungraded")]
+
         public async Task<IActionResult> GetUngradedResults()
+
         {
-            var teacherId = GetCurrentUserId();
 
-            var filter = Builders<Result>.Filter.Eq("Feedback", BsonNull.Value);
+            var teacherIdStr = GetCurrentUserId().ToString();
 
-            // Join with exam attempts and exams, filter exams by teacherId
-            var ungradedResults = await _db.Results.Aggregate()
-                .Match(filter)
-                .Lookup("ExamAttempts", "ExamAttemptId", "_id", "attempt")
-                .Unwind("attempt")
-                .Lookup("Exams", "attempt.ExamId", "_id", "exam")
-                .Unwind("exam")
-                .Match(Builders<BsonDocument>.Filter.Eq("exam.CreatedById", teacherId))
-                .Project(new BsonDocument
-                {
-                    { "ResultId", "$_id" },
-                    { "Score", "$Score" },
-                    { "StartedAt", "$attempt.StartedAt" },
-                    { "SubmittedAt", "$attempt.SubmittedAt" },
-                    { "ExamTitle", "$exam.Title" },
-                    { "StudentId", "$attempt.StudentId" }
-                })
+            if (!ObjectId.TryParse(teacherIdStr, out ObjectId teacherObjectId))
+
+                return BadRequest("Invalid teacher ID");
+
+
+            var filter = Builders<Result>.Filter.Or(
+
+                Builders<Result>.Filter.Eq("Feedback", BsonNull.Value),
+
+                Builders<Result>.Filter.Exists("Feedback", false)
+
+            );
+
+
+            var pipeline = new[]
+ {
+    new BsonDocument("$lookup", new BsonDocument
+    {
+        { "from", "ExamAttempts" },
+        { "localField", "ExamAttemptId" },
+        { "foreignField", "_id" },
+        { "as", "attempt" }
+    }),
+    new BsonDocument("$unwind", "$attempt"),
+    new BsonDocument("$lookup", new BsonDocument
+    {
+        { "from", "Exams" },
+        { "localField", "attempt.ExamId" },
+        { "foreignField", "_id" },
+        { "as", "exam" }
+    }),
+    new BsonDocument("$unwind", "$exam"),
+    new BsonDocument("$match", new BsonDocument("exam.CreatedById", teacherObjectId)),
+    new BsonDocument("$project", new BsonDocument
+    {
+      { "ResultId", new BsonDocument("$toString", "$_id") },
+      { "Score", "$Score" },
+      { "StartedAt", "$attempt.StartedAt" },
+      { "SubmittedAt", "$attempt.SubmittedAt" },
+      { "ExamTitle", "$exam.Title" },
+      { "StudentId", new BsonDocument("$toString", "$attempt.StudentId") },
+      { "ExamId", new BsonDocument("$toString", "$exam._id") }
+    }),
+};
+
+            var resultsRaw = await _db.Results
+                .Aggregate<BsonDocument>(pipeline)
                 .ToListAsync();
 
-            // Populate Student usernames - this requires additional queries or embedding in response here simplified
+            Console.WriteLine($"Documents returned: {resultsRaw.Count}");
 
-            return Ok(ungradedResults);
+
+
+
+            // Map raw BsonDocuments to DTOs
+
+            var results = resultsRaw.Select(d => new UngradedResultDto
+
+            {
+
+                ResultId = d.GetValue("ResultId").AsString,
+
+                Score = d.GetValue("Score").AsInt32,
+
+                StartedAt = d.Contains("StartedAt") ? d["StartedAt"].ToNullableUniversalTime() : null,
+
+                SubmittedAt = d.Contains("SubmittedAt") ? d["SubmittedAt"].ToNullableUniversalTime() : null,
+
+                ExamTitle = d.GetValue("ExamTitle").AsString,
+
+                StudentId = d.GetValue("StudentId").AsString,
+                ExamId = d.GetValue("ExamId").AsString
+
+            }).ToList();
+
+
+            return Ok(results);
+
         }
-
         public class FeedbackDto
         {
             public string Feedback { get; set; }

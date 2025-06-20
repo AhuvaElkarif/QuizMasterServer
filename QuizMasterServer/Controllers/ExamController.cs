@@ -104,7 +104,7 @@ namespace QuizMasterServer.Controllers
                 QuestionType = q.QuestionType,
                 Text = q.Text,
                 Options = q.Options,
-                CorrectAnswers = userRole == "Teacher" ? q.CorrectAnswers : new List<string>() // Hide answers for students
+                CorrectAnswers = q.CorrectAnswers
             }).ToList();
 
             // Create a DTO that includes exam info + questions
