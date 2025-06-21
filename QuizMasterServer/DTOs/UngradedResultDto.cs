@@ -7,7 +7,7 @@ namespace QuizMasterServer.DTOs
         public string ResultId { get; set; } = null!;
         public string ExamId { get; set; } = null!;
 
-
+        public string StudentName { get; set; } = null!;
         public int Score { get; set; }
 
         public DateTime? StartedAt { get; set; }
