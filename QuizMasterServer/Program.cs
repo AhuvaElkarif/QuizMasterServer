@@ -7,12 +7,12 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure MongoDB settings from appsettings.json
-builder.Services.Configure<MongoDbSettings>(
-    builder.Configuration.GetSection("MongoDbSettings"));
-
-// Register MongoDB client and collections service
-builder.Services.AddSingleton<IMongoDbContext, MongoDbContext>();
+var mongoSettings = new MongoDbSettings
+{
+    ConnectionString = Environment.GetEnvironmentVariable("MONGODB_CONNECTION") ?? "",
+    DatabaseName = Environment.GetEnvironmentVariable("MONGODB_DB") ?? "DefaultDbName"
+};
+builder.Services.AddSingleton(mongoSettings);
 
 // Add JwtTokenService
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
