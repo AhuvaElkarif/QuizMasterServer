@@ -81,7 +81,7 @@ builder.Services.AddCors(options =>
                       policy =>
                       {
                           policy.WithOrigins("http://localhost:3000",
-                              "https://quizmastersystem.netlify.app")
+                               "https://quizmastersystem.netlify.app")
                                 .AllowAnyHeader()
                                 .AllowAnyMethod()
                                 .AllowCredentials();
@@ -107,5 +107,4 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.Run();
 app.Run();
