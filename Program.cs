@@ -65,6 +65,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "ExamManagementMongoApi", Version = "v1" });
+
     var securityScheme = new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -85,17 +86,16 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// CORS Configuration
-var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
+// CORS Configuration - מאפשר גישה לכולם
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
         policy
-            .SetIsOriginAllowed(origin => true) // מאפשר כל origin
-            .AllowAnyMethod()
-            .AllowAnyHeader()
-            .AllowCredentials();
+            .AllowAnyOrigin()    // מאפשר לכל origin
+            .AllowAnyMethod()    // מאפשר כל HTTP method
+            .AllowAnyHeader();   // מאפשר כל header
+        // הסרנו AllowCredentials() כי זה לא תואם עם AllowAnyOrigin()
     });
 });
 
@@ -111,7 +111,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 // CORS must come BEFORE Authentication and Authorization
-app.UseCors(MyAllowSpecificOrigins);
+app.UseCors(); // משתמש ב-default policy
 
 app.UseAuthentication();
 app.UseAuthorization();
