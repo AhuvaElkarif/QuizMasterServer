@@ -86,16 +86,16 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// CORS Configuration - מאפשר גישה לכולם
+// CORS Configuration - מאפשר גישה לכולם עם פתרון ל-preflight
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
         policy
-            .AllowAnyOrigin()    // מאפשר לכל origin
-            .AllowAnyMethod()    // מאפשר כל HTTP method
-            .AllowAnyHeader();   // מאפשר כל header
-        // הסרנו AllowCredentials() כי זה לא תואם עם AllowAnyOrigin()
+            .AllowAnyOrigin()
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .SetPreflightMaxAge(TimeSpan.FromSeconds(3600)); // cache preflight למשך שעה
     });
 });
 
