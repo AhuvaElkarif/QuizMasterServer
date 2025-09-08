@@ -17,7 +17,7 @@ builder.Services.AddSingleton(mongoSettings);
 // Add JwtTokenService
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 
-// Authentication Setup
+// Authentication Setup - קריאה מ-Environment Variables
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -25,13 +25,24 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(opt =>
 {
-    var key = Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]);
+    var jwtKey = Environment.GetEnvironmentVariable("JWT_KEY");
+    var jwtIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER");
+    var jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE");
+
+    if (string.IsNullOrEmpty(jwtKey))
+        throw new InvalidOperationException("JWT_KEY environment variable is not set");
+    if (string.IsNullOrEmpty(jwtIssuer))
+        throw new InvalidOperationException("JWT_ISSUER environment variable is not set");
+    if (string.IsNullOrEmpty(jwtAudience))
+        throw new InvalidOperationException("JWT_AUDIENCE environment variable is not set");
+
+    var key = Encoding.UTF8.GetBytes(jwtKey);
     opt.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
         ValidateAudience = true,
-        ValidIssuer = builder.Configuration["Jwt:Issuer"],
-        ValidAudience = builder.Configuration["Jwt:Audience"],
+        ValidIssuer = jwtIssuer,
+        ValidAudience = jwtAudience,
         ValidateIssuerSigningKey = true,
         IssuerSigningKey = new SymmetricSecurityKey(key),
         ClockSkew = TimeSpan.Zero
@@ -57,7 +68,7 @@ builder.Services.AddSwaggerGen(c =>
     var securityScheme = new OpenApiSecurityScheme
     {
         Name = "Authorization",
-        Description = "Enter JWT Bearer token only",
+        Description = "Enter JWT Bearer token **_only_**",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.Http,
         Scheme = "bearer",
@@ -74,21 +85,23 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// CORS Configuration
 var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy(name: MyAllowSpecificOrigins, policy =>
+    options.AddDefaultPolicy(policy =>
     {
         policy
-            .AllowAnyOrigin()
+            .SetIsOriginAllowed(origin => true) // מאפשר כל origin
+            .AllowAnyMethod()
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowCredentials();
     });
 });
 
 var app = builder.Build();
 
-// Middleware - IMPORTANT: Order matters!
+// Middleware
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
