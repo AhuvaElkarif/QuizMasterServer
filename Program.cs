@@ -1,9 +1,5 @@
 using QuizMasterServer.Data;
 using QuizMasterServer.Services;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
-using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,7 +13,7 @@ builder.Services.AddSingleton(mongoSettings);
 // Add JwtTokenService
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 
-// Authentication Setup
+// Authentication Setup - קריאה מ-Environment Variables
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -25,13 +21,24 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(opt =>
 {
-    var key = Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]);
+    var jwtKey = Environment.GetEnvironmentVariable("JWT_KEY");
+    var jwtIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER");
+    var jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE");
+
+    if (string.IsNullOrEmpty(jwtKey))
+        throw new InvalidOperationException("JWT_KEY environment variable is not set");
+    if (string.IsNullOrEmpty(jwtIssuer))
+        throw new InvalidOperationException("JWT_ISSUER environment variable is not set");
+    if (string.IsNullOrEmpty(jwtAudience))
+        throw new InvalidOperationException("JWT_AUDIENCE environment variable is not set");
+
+    var key = Encoding.UTF8.GetBytes(jwtKey);
     opt.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
         ValidateAudience = true,
-        ValidIssuer = builder.Configuration["Jwt:Issuer"],
-        ValidAudience = builder.Configuration["Jwt:Audience"],
+        ValidIssuer = jwtIssuer,
+        ValidAudience = jwtAudience,
         ValidateIssuerSigningKey = true,
         IssuerSigningKey = new SymmetricSecurityKey(key),
         ClockSkew = TimeSpan.Zero
@@ -74,35 +81,63 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
+// CORS Configuration
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy(name: MyAllowSpecificOrigins, policy =>
+    options.AddDefaultPolicy(policy =>
     {
         policy
-            .AllowAnyOrigin()
+            .SetIsOriginAllowed(origin => true) // מאפשר כל origin
+            .AllowAnyMethod()
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowCredentials();
     });
 });
 
 var app = builder.Build();
 
-// Middleware - IMPORTANT: Order matters!
+// Middleware
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
+// הוספת middleware מותאם אישית ל-CORS headers
+app.Use(async (context, next) =>
+{
+    context.Response.OnStarting(() =>
+    {
+        var origin = context.Request.Headers["Origin"].FirstOrDefault();
+        if (!string.IsNullOrEmpty(origin))
+        {
+            context.Response.Headers.Add("Access-Control-Allow-Origin", origin);
+        }
+        else
+        {
+            context.Response.Headers.Add("Access-Control-Allow-Origin", "*");
+        }
+
+        context.Response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        context.Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+
+        return Task.CompletedTask;
+    });
+
+    // טיפול בבקשות OPTIONS (preflight)
+    if (context.Request.Method == "OPTIONS")
+    {
+        context.Response.StatusCode = 200;
+        return;
+    }
+
+    await next();
+});
+
 app.UseHttpsRedirection();
-
-// CORS must come BEFORE Authentication and Authorization
-app.UseCors(MyAllowSpecificOrigins);
-
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();
