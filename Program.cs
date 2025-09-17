@@ -9,8 +9,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 var mongoSettings = new MongoDbSettings
 {
-    ConnectionString = Environment.GetEnvironmentVariable("MONGODB_CONNECTION") ?? "",
-    DatabaseName = Environment.GetEnvironmentVariable("MONGODB_DB") ?? "DefaultDbName"
+    ConnectionString = Environment.GetEnvironmentVariable("MONGODB_CONNECTION") ?? "mongodb+srv://appuser:ahuva1234@cluster0.e0l0uml.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
+    DatabaseName = Environment.GetEnvironmentVariable("MONGODB_DB") ?? "ExamManagmentDB"
 };
 builder.Services.AddSingleton(mongoSettings);
 
@@ -25,9 +25,9 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(opt =>
 {
-    var jwtKey = Environment.GetEnvironmentVariable("JWT_KEY");
-    var jwtIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER");
-    var jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE");
+    var jwtKey = Environment.GetEnvironmentVariable("JWT_KEY") ?? "MyVerySecretJwtKeyThatIsAtLeast32CharsLong";
+    var jwtIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER") ?? "https://quizmasterserver.onrender.com";
+    var jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE") ?? "QuizMasterClient";
 
     if (string.IsNullOrEmpty(jwtKey))
         throw new InvalidOperationException("JWT_KEY environment variable is not set");
@@ -102,11 +102,11 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Middleware
-if (app.Environment.IsDevelopment())
-{
+//if (app.Environment.IsDevelopment())
+//{
     app.UseSwagger();
     app.UseSwaggerUI();
-}
+//}
 
 app.UseHttpsRedirection();
 
