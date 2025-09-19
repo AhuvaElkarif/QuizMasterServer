@@ -9,9 +9,14 @@ var builder = WebApplication.CreateBuilder(args);
 
 var mongoSettings = new MongoDbSettings
 {
-    ConnectionString = Environment.GetEnvironmentVariable("MONGODB_CONNECTION") ?? "mongodb+srv://appuser:ahuva1234@cluster0.e0l0uml.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
-    DatabaseName = Environment.GetEnvironmentVariable("MONGODB_DB") ?? "ExamManagmentDB"
+    ConnectionString =  "mongodb+srv://appuser:ahuva1234@cluster0.e0l0uml.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
+    DatabaseName =  "ExamManagmentDB"
 };
+//var mongoSettings = new MongoDbSettings
+//{
+//    ConnectionString = Environment.GetEnvironmentVariable("MONGODB_CONNECTION") ?? "mongodb+srv://appuser:ahuva1234@cluster0.e0l0uml.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
+//    DatabaseName = Environment.GetEnvironmentVariable("MONGODB_DB") ?? "ExamManagmentDB"
+//};
 builder.Services.AddSingleton(mongoSettings);
 
 builder.Services.AddScoped<IMongoDbContext, MongoDbContext>();
