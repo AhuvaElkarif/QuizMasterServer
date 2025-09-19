@@ -1,10 +1,9 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MongoDB.Bson;
-using MongoDB.Driver;
-using QuizMasterServer.Data;
 using QuizMasterServer.DTOs;
-using QuizMasterServer.Models;
+using QuizMasterServer.Services;
+using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -16,11 +15,11 @@ namespace QuizMasterServer.Controllers
     [Authorize(Policy = "TeacherOrStudent")]
     public class ExamController : ControllerBase
     {
-        private readonly IMongoDbContext _db;
+        private readonly IExamService _examService;
 
-        public ExamController(IMongoDbContext db)
+        public ExamController(IExamService examService)
         {
-            _db = db;
+            _examService = examService;
         }
 
         private ObjectId GetCurrentUserId()
@@ -33,219 +32,146 @@ namespace QuizMasterServer.Controllers
             return objectId;
         }
 
+        /// <summary>
+        /// Get all exams for the current teacher
+        /// </summary>
         [HttpGet]
+        [Authorize(Policy = "TeacherOnly")]
         public async Task<ActionResult<List<ExamDto>>> GetMyExams()
         {
-            var teacherId = GetCurrentUserId();
-            if (teacherId == ObjectId.Empty)
-                return Unauthorized();
-
-            // Convert teacherId to string for comparison with CreatedById (string)
-            var teacherIdString = teacherId.ToString();
-
-            var exams = await _db.Exams.Find(e => e.CreatedById == teacherIdString).ToListAsync();
-
-            var examsDto = new List<ExamDto>();
-            foreach (var exam in exams)
+            try
             {
-                examsDto.Add(new ExamDto
-                {
-                    Id = exam.Id,
-                    Title = exam.Title,
-                    Description = exam.Description,
-                    DurationMinutes = exam.DurationMinutes
-                });
-            }
+                var teacherId = GetCurrentUserId();
+                if (teacherId == ObjectId.Empty)
+                    return Unauthorized();
 
-            return Ok(examsDto);
+                var exams = await _examService.GetMyExamsAsync(teacherId);
+                return Ok(exams);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "Internal server error", message = ex.Message });
+            }
         }
 
+        /// <summary>
+        /// Get a specific exam with questions
+        /// </summary>
         [HttpGet("{id:length(24)}")]
         public async Task<ActionResult<ExamWithQuestionsDto>> GetExam(string id)
         {
-            var userId = GetCurrentUserId();
-            if (userId == ObjectId.Empty)
-                return Unauthorized();
-
-            if (!ObjectId.TryParse(id, out var examId))
-                return BadRequest("Invalid exam id");
-
-            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
-            var userIdString = userId.ToString();
-            var examIdString = id;
-
-            Exam exam;
-
-            if (userRole == "Teacher")
+            try
             {
-                // Teachers can only access their own exams
-                exam = await _db.Exams.Find(e => e.Id == examIdString && e.CreatedById == userIdString).FirstOrDefaultAsync();
+                var userId = GetCurrentUserId();
+                if (userId == ObjectId.Empty)
+                    return Unauthorized();
+
+                var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+
+                var exam = await _examService.GetExamAsync(id, userId, userRole);
+                if (exam == null)
+                    return NotFound();
+
+                return Ok(exam);
             }
-            else if (userRole == "Student")
+            catch (ArgumentException ex)
             {
-                // Students can access any exam (you might want to add more restrictions here)
-                exam = await _db.Exams.Find(e => e.Id == examIdString).FirstOrDefaultAsync();
+                return BadRequest(ex.Message);
             }
-            else
+            catch (UnauthorizedAccessException ex)
             {
-                return Forbid("Invalid user role");
+                return Forbid(ex.Message);
             }
-
-            if (exam == null)
-                return NotFound();
-
-            // Fetch questions from Questions collection where ExamId equals examId string
-            var questions = await _db.Questions.Find(q => q.ExamId == examIdString).ToListAsync();
-
-            // For students, you might want to hide correct answers
-            var questionDtos = questions.Select(q => new QuestionDto
+            catch (Exception ex)
             {
-                Id = q.Id,
-                QuestionType = q.QuestionType,
-                Text = q.Text,
-                Options = q.Options,
-                CorrectAnswers = q.CorrectAnswers
-            }).ToList();
-
-            // Create a DTO that includes exam info + questions
-            var dto = new ExamWithQuestionsDto
-            {
-                Id = exam.Id,
-                Title = exam.Title,
-                Description = exam.Description,
-                DurationMinutes = exam.DurationMinutes,
-                Questions = questionDtos
-            };
-
-            return Ok(dto);
+                return StatusCode(500, new { error = "Internal server error", message = ex.Message });
+            }
         }
+
+        /// <summary>
+        /// Create a new exam
+        /// </summary>
         [HttpPost]
+        [Authorize(Policy = "TeacherOnly")]
         public async Task<ActionResult<ExamDto>> CreateExam([FromBody] ExamCreateDto examCreateDto)
         {
-            var teacherId = GetCurrentUserId();
-            if (teacherId == ObjectId.Empty)
-                return Unauthorized();
-
-            var exam = new Exam
+            try
             {
-                Id = ObjectId.GenerateNewId().ToString(),  // Store Id as string
-                Title = examCreateDto.Title,
-                Description = examCreateDto.Description,
-                DurationMinutes = examCreateDto.DurationMinutes,
-                CreatedById = teacherId.ToString()  // Store CreatedById as string
-            };
+                var teacherId = GetCurrentUserId();
+                if (teacherId == ObjectId.Empty)
+                    return Unauthorized();
 
-            await _db.Exams.InsertOneAsync(exam);
-
-            var dto = new ExamDto
+                var dto = await _examService.CreateExamAsync(examCreateDto, teacherId);
+                return CreatedAtAction(nameof(GetExam), new { id = dto.Id }, dto);
+            }
+            catch (Exception ex)
             {
-                Id = exam.Id,
-                Title = exam.Title,
-                Description = exam.Description,
-                DurationMinutes = exam.DurationMinutes
-            };
-
-            return CreatedAtAction(nameof(GetExam), new { id = dto.Id }, dto);
+                return StatusCode(500, new { error = "Internal server error", message = ex.Message });
+            }
         }
 
+        /// <summary>
+        /// Update an existing exam
+        /// </summary>
         [HttpPut("{id:length(24)}")]
+        [Authorize(Policy = "TeacherOnly")]
         public async Task<IActionResult> UpdateExam(string id, [FromBody] ExamUpdateDto updatedExamDto)
         {
-            var teacherId = GetCurrentUserId();
-            if (teacherId == ObjectId.Empty)
-                return Unauthorized();
-
-            if (!ObjectId.TryParse(id, out var examObjectId))
-                return BadRequest("Invalid exam id");
-
-            var teacherIdString = teacherId.ToString();
-            var examIdString = id;
-
-            var existingExam = await _db.Exams.Find(e => e.Id == examIdString && e.CreatedById == teacherIdString).FirstOrDefaultAsync();
-            if (existingExam == null)
-                return NotFound();
-
-            // Update exam
-            var updatedExam = new Exam
+            try
             {
-                Id = examIdString,
-                Title = updatedExamDto.Title,
-                Description = updatedExamDto.Description,
-                DurationMinutes = updatedExamDto.DurationMinutes,
-                CreatedById = teacherIdString
-            };
+                var teacherId = GetCurrentUserId();
+                if (teacherId == ObjectId.Empty)
+                    return Unauthorized();
 
-            var examResult = await _db.Exams.ReplaceOneAsync(
-                e => e.Id == examIdString && e.CreatedById == teacherIdString,
-                updatedExam
-            );
-
-            if (!examResult.IsAcknowledged || examResult.MatchedCount == 0)
-                return StatusCode(500, "Exam update failed");
-
-            // Upsert questions if any
-            if (updatedExamDto.Questions != null)
-            {
-                foreach (var questionDto in updatedExamDto.Questions)
-                {
-                    // Validate or generate question ID as a valid ObjectId string
-                    string questionId;
-                    if (string.IsNullOrWhiteSpace(questionDto.Id) || !ObjectId.TryParse(questionDto.Id, out _))
-                    {
-                        questionId = ObjectId.GenerateNewId().ToString();
-                    }
-                    else
-                    {
-                        questionId = questionDto.Id.Trim();
-                    }
-
-                    var question = new Question
-                    {
-                        Id = questionId,
-                        ExamId = examIdString,
-                        QuestionType = questionDto.QuestionType,
-                        Text = questionDto.Text,
-                        Options = questionDto.Options,
-                        CorrectAnswers = questionDto.CorrectAnswers
-                    };
-
-                    var filter = Builders<Question>.Filter.And(
-                        Builders<Question>.Filter.Eq(q => q.Id, question.Id),
-                        Builders<Question>.Filter.Eq(q => q.ExamId, question.ExamId)
-                    );
-
-                    var updateOptions = new ReplaceOptions { IsUpsert = true };
-
-                    var questionResult = await _db.Questions.ReplaceOneAsync(filter, question, updateOptions);
-
-                    if (!questionResult.IsAcknowledged)
-                    {
-                        return StatusCode(500, $"Failed to update question with id {question.Id}");
-                    }
-                }
+                await _examService.UpdateExamAsync(id, updatedExamDto, teacherId);
+                return NoContent();
             }
-
-            return NoContent();
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "Internal server error", message = ex.Message });
+            }
         }
 
+        /// <summary>
+        /// Delete an exam
+        /// </summary>
         [HttpDelete("{id:length(24)}")]
+        [Authorize(Policy = "TeacherOnly")]
         public async Task<IActionResult> DeleteExam(string id)
         {
-            var teacherId = GetCurrentUserId();
-            if (teacherId == ObjectId.Empty)
-                return Unauthorized();
+            try
+            {
+                var teacherId = GetCurrentUserId();
+                if (teacherId == ObjectId.Empty)
+                    return Unauthorized();
 
-            if (!ObjectId.TryParse(id, out var examId))
-                return BadRequest("Invalid exam id");
-
-            var teacherIdString = teacherId.ToString();
-            var examIdString = id;
-
-            var result = await _db.Exams.DeleteOneAsync(e => e.Id == examIdString && e.CreatedById == teacherIdString);
-            if (result.DeletedCount == 0)
-                return NotFound();
-
-            return NoContent();
+                await _examService.DeleteExamAsync(id, teacherId);
+                return NoContent();
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "Internal server error", message = ex.Message });
+            }
         }
     }
 }

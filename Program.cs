@@ -14,10 +14,14 @@ var mongoSettings = new MongoDbSettings
 };
 builder.Services.AddSingleton(mongoSettings);
 
-// Add JwtTokenService
+builder.Services.AddScoped<IMongoDbContext, MongoDbContext>();
+builder.Services.AddScoped<IQuestionService, QuestionService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IResultService, ResultService>();
+builder.Services.AddScoped<IStudentService, StudentService>();
+builder.Services.AddScoped<IExamService, ExamService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 
-// Authentication Setup - קריאה מ-Environment Variables
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -57,7 +61,6 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("TeacherOrStudent", p => p.RequireRole("Student", "Teacher"));
 });
 
-// Controllers
 builder.Services.AddControllers();
 
 // Swagger with JWT
@@ -86,7 +89,6 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// CORS Configuration - מאפשר גישה לכולם עם פתרון ל-preflight
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -95,23 +97,21 @@ builder.Services.AddCors(options =>
             .AllowAnyOrigin()
             .AllowAnyMethod()
             .AllowAnyHeader()
-            .SetPreflightMaxAge(TimeSpan.FromSeconds(3600)); // cache preflight למשך שעה
+            .SetPreflightMaxAge(TimeSpan.FromSeconds(3600));
     });
 });
 
 var app = builder.Build();
 
-// Middleware
-//if (app.Environment.IsDevelopment())
-//{
+if (app.Environment.IsDevelopment())
+{
     app.UseSwagger();
     app.UseSwaggerUI();
-//}
+}
 
 app.UseHttpsRedirection();
 
-// CORS must come BEFORE Authentication and Authorization
-app.UseCors(); // משתמש ב-default policy
+app.UseCors(); 
 
 app.UseAuthentication();
 app.UseAuthorization();
