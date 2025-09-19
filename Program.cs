@@ -15,6 +15,7 @@ var mongoSettings = new MongoDbSettings
 builder.Services.AddSingleton(mongoSettings);
 
 builder.Services.AddScoped<IMongoDbContext, MongoDbContext>();
+builder.Services.AddScoped<IMongoDbContext, MongoDbContext>();
 builder.Services.AddScoped<IQuestionService, QuestionService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IResultService, ResultService>();
