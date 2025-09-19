@@ -7,19 +7,17 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var mongoSettings = new MongoDbSettings
+var mongoConnection = Environment.GetEnvironmentVariable("MONGODB_CONNECTION")
+                      ?? builder.Configuration.GetSection("MongoDbSettings:ConnectionString").Value;
+
+var mongoDatabase = Environment.GetEnvironmentVariable("MONGODB_DB")
+                    ?? builder.Configuration.GetSection("MongoDbSettings:DatabaseName").Value;
+
+builder.Services.Configure<MongoDbSettings>(options =>
 {
-    ConnectionString =  "mongodb+srv://appuser:ahuva1234@cluster0.e0l0uml.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
-    DatabaseName =  "ExamManagmentDB"
-};
-//var mongoSettings = new MongoDbSettings
-//{
-//    ConnectionString = Environment.GetEnvironmentVariable("MONGODB_CONNECTION") ?? "mongodb+srv://appuser:ahuva1234@cluster0.e0l0uml.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
-//    DatabaseName = Environment.GetEnvironmentVariable("MONGODB_DB") ?? "ExamManagmentDB"
-//};
-builder.Services.Configure<MongoDbSettings>(
-    builder.Configuration.GetSection("MongoDbSettings"));
-//builder.Services.AddSingleton(mongoSettings);
+    options.ConnectionString = mongoConnection;
+    options.DatabaseName = mongoDatabase;
+});
 
 builder.Services.AddScoped<IMongoDbContext, MongoDbContext>();
 builder.Services.AddScoped<IMongoDbContext, MongoDbContext>();
