@@ -9,5 +9,6 @@ namespace QuizMasterServer.Services
     {
         Task<AuthResponse> RegisterAsync(RegisterRequest request);
         Task<AuthResponse> LoginAsync(LoginRequest request);
+        Task<User> GetUserByEmailAsync(string email);
     }
 }

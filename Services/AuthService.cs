@@ -69,5 +69,20 @@ namespace QuizMasterServer.Services
                 Role = user.Role
             };
         }
+
+        // <summary>
+        /// Get user by email - needed for Google OAuth
+        /// </summary>
+        public async Task<User> GetUserByEmailAsync(string email)
+        {
+            try
+            {
+                return await _db.Users.Find(u => u.Username == email).FirstOrDefaultAsync();
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Error retrieving user: {ex.Message}");
+            }
+        }
     }
 }

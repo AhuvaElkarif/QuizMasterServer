@@ -1,9 +1,16 @@
-using QuizMasterServer.Data;
-using QuizMasterServer.Services;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using QuizMasterServer.Data;
+using QuizMasterServer.Services;
+using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,7 +27,6 @@ builder.Services.Configure<MongoDbSettings>(options =>
 });
 
 builder.Services.AddScoped<IMongoDbContext, MongoDbContext>();
-builder.Services.AddScoped<IMongoDbContext, MongoDbContext>();
 builder.Services.AddScoped<IQuestionService, QuestionService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IResultService, ResultService>();
@@ -28,6 +34,7 @@ builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IExamService, ExamService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 
+// Authentication - הוספת Google OAuth למערכת הקיימת
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -57,9 +64,26 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(key),
         ClockSkew = TimeSpan.Zero
     };
+})
+.AddCookie("GoogleAuth", options =>
+{
+    options.LoginPath = "/api/auth/google-login";
+    options.LogoutPath = "/api/auth/google-logout";
+    options.ExpireTimeSpan = TimeSpan.FromHours(1);
+})
+.AddGoogle(options =>
+{
+    options.ClientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID")
+                      ?? builder.Configuration["Google:ClientId"];
+    options.ClientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET")
+                          ?? builder.Configuration["Google:ClientSecret"];
+    options.CallbackPath = "/api/auth/google-callback";
+    options.SignInScheme = "GoogleAuth";
+
+    options.Scope.Add("email");
+    options.Scope.Add("profile");
 });
 
-// Authorization policies
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("TeacherOnly", p => p.RequireRole("Teacher"));
@@ -69,7 +93,6 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddControllers();
 
-// Swagger with JWT
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -99,10 +122,15 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
+        // שימוש במשתני סביבה לכתובות מותרות
+        var allowedOrigins = Environment.GetEnvironmentVariable("ALLOWED_ORIGINS")?.Split(',')
+                           ?? new[] { "http://localhost:3000", "https://quizmastersystem.netlify.app" };
+
         policy
-            .AllowAnyOrigin()
+            .WithOrigins(allowedOrigins)
             .AllowAnyMethod()
             .AllowAnyHeader()
+            .AllowCredentials() // חשוב לGoogle OAuth
             .SetPreflightMaxAge(TimeSpan.FromSeconds(3600));
     });
 });
@@ -116,7 +144,7 @@ if (app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
-app.UseCors(); 
+app.UseCors();
 
 app.UseAuthentication();
 app.UseAuthorization();

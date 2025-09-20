@@ -14,6 +14,8 @@ namespace QuizMasterServer.Models
 
         [BsonElement("Username")]
         public string Username { get; set; }
+        [BsonElement("Email")]
+        public string Email { get; set; }
 
         [BsonElement("Role")]
         public string Role { get; set; } // "Teacher" or "Student"
