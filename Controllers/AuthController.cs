@@ -72,7 +72,7 @@ namespace QuizMasterServer.Controllers
             }
         }
 
-        /// <summary>
+        /// <summary> 
         /// Start Google OAuth login
         /// </summary>
         [HttpGet("google-login")]
