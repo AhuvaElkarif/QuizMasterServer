@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -80,6 +81,14 @@ builder.Services.AddAuthentication(options =>
     options.CallbackPath = "/api/auth/google-callback";
     options.SignInScheme = "GoogleAuth";
 
+    options.Events.OnRedirectToAuthorizationEndpoint = context =>
+    {
+        // וידוא שה-redirect URI הוא HTTPS
+        var redirectUri = context.RedirectUri.Replace("http://", "https://");
+        context.Response.Redirect(redirectUri);
+        return Task.CompletedTask;
+    };
+
     options.Scope.Add("email");
     options.Scope.Add("profile");
 });
@@ -145,6 +154,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
 
 app.UseAuthentication();
 app.UseAuthorization();

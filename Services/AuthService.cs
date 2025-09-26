@@ -18,15 +18,15 @@ namespace QuizMasterServer.Services
 
         public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
         {
-            if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
-                throw new ArgumentException("Username and password are required.");
+            if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+                throw new ArgumentException("Email and password are required.");
 
             if (request.Role != "Teacher" && request.Role != "Student")
                 throw new ArgumentException("Role must be either 'Teacher' or 'Student'.");
 
-            var existingUser = await _db.Users.Find(u => u.Username == request.Username).FirstOrDefaultAsync();
+            var existingUser = await _db.Users.Find(u => u.Email == request.Email).FirstOrDefaultAsync();
             if (existingUser != null)
-                throw new InvalidOperationException("Username already exists.");
+                throw new InvalidOperationException("Email already exists.");
 
             User user;
             if (request.Role == "Teacher")
@@ -35,7 +35,7 @@ namespace QuizMasterServer.Services
                 user = new Student();
 
             user.Id = MongoDB.Bson.ObjectId.GenerateNewId();
-            user.Username = request.Username;
+            user.Email = request.Email;
             user.SetPassword(request.Password);
 
             await _db.Users.InsertOneAsync(user);
@@ -45,27 +45,27 @@ namespace QuizMasterServer.Services
             return new AuthResponse()
             {
                 Token = token,
-                Username = user.Username,
+                Email = user.Email,
                 Role = user.Role
             };
         }
 
         public async Task<AuthResponse> LoginAsync(LoginRequest request)
         {
-            if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
-                throw new ArgumentException("Username and password are required.");
+            if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+                throw new ArgumentException("Email and password are required.");
 
-            var user = await _db.Users.Find(u => u.Username == request.Username).FirstOrDefaultAsync();
+            var user = await _db.Users.Find(u => u.Email == request.Email).FirstOrDefaultAsync();
 
             if (user == null || !user.VerifyPassword(request.Password))
-                throw new UnauthorizedAccessException("Invalid username or password.");
+                throw new UnauthorizedAccessException("Invalid email or password.");
 
             var token = _jwtTokenService.GenerateToken(user);
 
             return new AuthResponse()
             {
                 Token = token,
-                Username = user.Username,
+                Email = user.Email,
                 Role = user.Role
             };
         }
@@ -77,7 +77,7 @@ namespace QuizMasterServer.Services
         {
             try
             {
-                return await _db.Users.Find(u => u.Username == email).FirstOrDefaultAsync();
+                return await _db.Users.Find(u => u.Email == email).FirstOrDefaultAsync();
             }
             catch (Exception ex)
             {
