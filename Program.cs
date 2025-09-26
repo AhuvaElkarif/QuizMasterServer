@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
@@ -71,6 +72,8 @@ builder.Services.AddAuthentication(options =>
     options.LoginPath = "/api/auth/google-login";
     options.LogoutPath = "/api/auth/google-logout";
     options.ExpireTimeSpan = TimeSpan.FromHours(1);
+    options.Cookie.SameSite = SameSiteMode.Lax; 
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always; 
 })
 .AddGoogle(options =>
 {
@@ -78,16 +81,20 @@ builder.Services.AddAuthentication(options =>
                       ?? builder.Configuration["Google:ClientId"];
     options.ClientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET")
                           ?? builder.Configuration["Google:ClientSecret"];
-    options.CallbackPath = "/api/auth/google-callback";
+
+    // תקן את ה-CallbackPath להיות בדיוק כמו ה-Route בcontroller
+    options.CallbackPath = "/api/auth/google-callback"; // case sensitive!
     options.SignInScheme = "GoogleAuth";
 
+    // הסר את זה - זה גורם לבעיות
+    /*
     options.Events.OnRedirectToAuthorizationEndpoint = context =>
     {
-        // וידוא שה-redirect URI הוא HTTPS
         var redirectUri = context.RedirectUri.Replace("http://", "https://");
         context.Response.Redirect(redirectUri);
         return Task.CompletedTask;
     };
+    */
 
     options.Scope.Add("email");
     options.Scope.Add("profile");
@@ -159,6 +166,10 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 });
+
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo("/tmp/keys"))
+    .SetApplicationName("QuizMasterServer");
 
 app.UseAuthentication();
 app.UseAuthorization();
