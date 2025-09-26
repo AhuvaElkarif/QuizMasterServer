@@ -95,7 +95,10 @@ namespace QuizMasterServer.Controllers
             {
                 var result = await HttpContext.AuthenticateAsync("GoogleAuth");
                 if (!result.Succeeded)
+                {
+                    Console.WriteLine("Google authentication failed");
                     return BadRequest("Google authentication failed");
+                }
 
                 var email = result.Principal.FindFirstValue(ClaimTypes.Email);
                 var name = result.Principal.FindFirstValue(ClaimTypes.Name);
@@ -146,13 +149,16 @@ namespace QuizMasterServer.Controllers
                 }
 
                 var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "http://localhost:3000";
+                Console.WriteLine($"Frontend URL: {frontendUrl}");
                 var userJson = JsonSerializer.Serialize(userInfo);
                 var redirectUrl = $"{frontendUrl}/auth-success?user={Uri.EscapeDataString(userJson)}";
 
+                Console.WriteLine($"Redirecting to: {redirectUrl}");
                 return Redirect(redirectUrl);
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"Error in GoogleCallback: {ex.Message}");
                 var errorUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "http://localhost:3000";
                 return Redirect($"{errorUrl}/auth-error?message={Uri.EscapeDataString(ex.Message)}");
             }
