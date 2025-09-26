@@ -167,9 +167,9 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 });
 
-builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(new DirectoryInfo("/tmp/keys"))
-    .SetApplicationName("QuizMasterServer");
+//builder.Services.AddDataProtection()
+//    .PersistKeysToFileSystem(new DirectoryInfo("/tmp/keys"))
+//    .SetApplicationName("QuizMasterServer");
 
 app.UseAuthentication();
 app.UseAuthorization();
