@@ -127,8 +127,7 @@ namespace QuizMasterServer.Controllers
                 {
                     var registerRequest = new RegisterRequest
                     {
-                         Username = name,
-                        //Email = email,
+                        Email = email,
                         Password = Guid.NewGuid().ToString(), // סיסמה רנדומלית
                         Role = "Student" // ברירת מחדל
                     };
@@ -136,7 +135,7 @@ namespace QuizMasterServer.Controllers
                     var newUserResponse = await _authService.RegisterAsync(registerRequest);
                     userInfo = new
                     {
-                        //Id = newUserResponse.UserId,
+                        Id = newUserResponse.UserId,
                         Email = email,
                         Name = name,
                         Role = "Student",
@@ -146,7 +145,6 @@ namespace QuizMasterServer.Controllers
                     };
                 }
 
-                // הפניה חזרה לפרונטאנד
                 var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "http://localhost:3000";
                 var userJson = JsonSerializer.Serialize(userInfo);
                 var redirectUrl = $"{frontendUrl}/auth-success?user={Uri.EscapeDataString(userJson)}";
