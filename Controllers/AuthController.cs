@@ -10,7 +10,7 @@ using static QuizMasterServer.DTOs.AuthDtos;
 namespace QuizMasterServer.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/auth")]
     public class AuthController : ControllerBase
     {
         private readonly IAuthService _authService;
