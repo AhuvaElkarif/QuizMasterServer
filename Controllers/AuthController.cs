@@ -80,7 +80,8 @@ namespace QuizMasterServer.Controllers
         {
             var authProps = new AuthenticationProperties
             {
-                RedirectUri = Url.Action("GoogleCallback")
+                RedirectUri = "/api/auth/google-callback"
+                //RedirectUri = Url.Action("GoogleCallback")
             };
             return Challenge(authProps, GoogleDefaults.AuthenticationScheme);
         }
