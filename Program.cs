@@ -34,13 +34,15 @@ builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IExamService, ExamService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 
+// תיקון Data Protection - שמירה ב-MongoDB במקום בקובץ
 builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(new DirectoryInfo(@"/app/keys/"))
-    .SetApplicationName("QuizMasterServer");
+    .PersistKeysToFileSystem(new DirectoryInfo("/tmp/keys/"))  // שימוש ב-/tmp שתמיד זמין
+    .SetApplicationName("QuizMasterServer")
+    .SetDefaultKeyLifetime(TimeSpan.FromDays(90));
 
 builder.Services.Configure<CookiePolicyOptions>(options =>
 {
-    options.MinimumSameSitePolicy = SameSiteMode.None;  // שינוי ל-None
+    options.MinimumSameSitePolicy = SameSiteMode.None;
     options.Secure = CookieSecurePolicy.Always;
 });
 
@@ -73,8 +75,12 @@ builder.Services.AddAuthentication(options =>
     options.LoginPath = "/api/auth/google-login";
     options.LogoutPath = "/api/auth/google-logout";
     options.ExpireTimeSpan = TimeSpan.FromHours(1);
-    options.Cookie.SameSite = SameSiteMode.None;   
+    options.SlidingExpiration = true;
+    options.Cookie.Name = "QuizMaster.Auth";
+    options.Cookie.SameSite = SameSiteMode.None;
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
 })
 .AddGoogle(options =>
 {
@@ -84,6 +90,12 @@ builder.Services.AddAuthentication(options =>
                            ?? builder.Configuration["Google:ClientSecret"];
     options.CallbackPath = "/api/auth/google-callback";
     options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.SaveTokens = true;
+
+    // חשוב! הגדרות נוספות ל-Google
+    options.CorrelationCookie.SameSite = SameSiteMode.None;
+    options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
+
     options.Scope.Add("email");
     options.Scope.Add("profile");
 });
@@ -139,19 +151,22 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// ודא שהתיקייה קיימת
+Directory.CreateDirectory("/tmp/keys/");
+
+// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
-
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedFor
 });
 
+app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
 

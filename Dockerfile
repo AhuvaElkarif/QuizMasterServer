@@ -10,8 +10,8 @@ FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
 WORKDIR /app
 COPY --from=build /app .
 
-# ליצור תיקיית keys ל־Data Protection
-RUN mkdir -p /app/keys
+# ליצור תיקיית keys בתיקייה זמנית שתמיד זמינה
+RUN mkdir -p /tmp/keys && chmod 777 /tmp/keys
 
 EXPOSE 10000
 ENV ASPNETCORE_URLS=http://+:10000
