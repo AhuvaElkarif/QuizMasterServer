@@ -3,16 +3,13 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using QuizMasterServer.Data;
 using QuizMasterServer.Services;
 using System.Security.Claims;
 using System.Text;
-using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,10 +35,11 @@ builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 
 builder.Services.Configure<CookiePolicyOptions>(options =>
 {
-    options.MinimumSameSitePolicy = SameSiteMode.None;
+    options.MinimumSameSitePolicy = SameSiteMode.None;  // שינוי ל-None
     options.Secure = CookieSecurePolicy.Always;
 });
 
+// Authentication
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -52,13 +50,6 @@ builder.Services.AddAuthentication(options =>
     var jwtKey = Environment.GetEnvironmentVariable("JWT_KEY") ?? "MyVerySecretJwtKeyThatIsAtLeast32CharsLong";
     var jwtIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER") ?? "https://quizmasterserver.onrender.com";
     var jwtAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE") ?? "QuizMasterClient";
-
-    if (string.IsNullOrEmpty(jwtKey))
-        throw new InvalidOperationException("JWT_KEY environment variable is not set");
-    if (string.IsNullOrEmpty(jwtIssuer))
-        throw new InvalidOperationException("JWT_ISSUER environment variable is not set");
-    if (string.IsNullOrEmpty(jwtAudience))
-        throw new InvalidOperationException("JWT_AUDIENCE environment variable is not set");
 
     var key = Encoding.UTF8.GetBytes(jwtKey);
     opt.TokenValidationParameters = new TokenValidationParameters
@@ -77,7 +68,7 @@ builder.Services.AddAuthentication(options =>
     options.LoginPath = "/api/auth/google-login";
     options.LogoutPath = "/api/auth/google-logout";
     options.ExpireTimeSpan = TimeSpan.FromHours(1);
-    options.Cookie.SameSite = SameSiteMode.None; // שונה ל-None כדי לאפשר מעבר דומיינים
+    options.Cookie.SameSite = SameSiteMode.None;   // שינוי ל-None
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
 })
 .AddGoogle(options =>
@@ -87,9 +78,7 @@ builder.Services.AddAuthentication(options =>
     options.ClientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET")
                            ?? builder.Configuration["Google:ClientSecret"];
     options.CallbackPath = "/api/auth/google-callback";
-
     options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-
     options.Scope.Add("email");
     options.Scope.Add("profile");
 });
@@ -102,7 +91,6 @@ builder.Services.AddAuthorization(options =>
 });
 
 builder.Services.AddControllers();
-
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -152,22 +140,19 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// קודם ForwardedHeaders
+app.UseHttpsRedirection();
+
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedFor
 });
 
-// Redirect ל-HTTPS
-app.UseHttpsRedirection();
+app.UseStaticFiles();
+app.UseRouting();
 
-// CORS
 app.UseCors();
 
-// Cookie Policy
 app.UseCookiePolicy();
-
-// Authentication + Authorization
 app.UseAuthentication();
 app.UseAuthorization();
 
