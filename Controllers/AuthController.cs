@@ -81,8 +81,8 @@ namespace QuizMasterServer.Controllers
         {
             var authProps = new AuthenticationProperties
             {
-                RedirectUri = "/api/auth/google-callback"
-                //RedirectUri = Url.Action("GoogleCallback")
+                RedirectUri = Url.Action(nameof(GoogleCallback)),
+                IsPersistent = false
             };
             return Challenge(authProps, GoogleDefaults.AuthenticationScheme);
         }
@@ -90,102 +90,114 @@ namespace QuizMasterServer.Controllers
         /// <summary>
         /// Google OAuth callback
         /// </summary>
-       [HttpGet("google-callback")]
-public async Task<IActionResult> GoogleCallback()
-{
-    var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "https://quizmastersystem.netlify.app";
-    
-    try
-    {
-        Console.WriteLine("=== GoogleCallback Started ===");
-        Console.WriteLine($"Frontend URL: {frontendUrl}");
+        [HttpGet("google-callback")]
+        public async Task<IActionResult> GoogleCallback()
+        {
+            var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "https://quizmastersystem.netlify.app";
+
+            try
+            {
+                Console.WriteLine("=== GoogleCallback Started ===");
+                Console.WriteLine($"Frontend URL: {frontendUrl}");
+                Console.WriteLine($"Query String: {Request.QueryString}");
+
+                // אימות הבקשה מגוגל
                 var result = await HttpContext.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                //var result = await HttpContext.AuthenticateAsync("GoogleAuth");
-        if (!result.Succeeded)
-        {
-            Console.WriteLine("Authentication failed");
-            return Redirect($"{frontendUrl}/auth-error?message=authentication_failed");
-        }
 
-        Console.WriteLine("Authentication succeeded");
+                if (!result.Succeeded || result.Principal == null)
+                {
+                    Console.WriteLine($"Authentication failed. Succeeded: {result.Succeeded}");
+                    if (result.Failure != null)
+                    {
+                        Console.WriteLine($"Failure: {result.Failure.Message}");
+                    }
+                    return Redirect($"{frontendUrl}/auth-error?message=authentication_failed");
+                }
 
-        var email = result.Principal.FindFirstValue(ClaimTypes.Email);
-        var name = result.Principal.FindFirstValue(ClaimTypes.Name);
-        var googleId = result.Principal.FindFirstValue(ClaimTypes.NameIdentifier);
-        var picture = result.Principal.FindFirstValue("picture");
+                Console.WriteLine("Authentication succeeded");
 
-        Console.WriteLine($"Email: {email}, Name: {name}");
+                var email = result.Principal.FindFirstValue(ClaimTypes.Email);
+                var name = result.Principal.FindFirstValue(ClaimTypes.Name);
+                var googleId = result.Principal.FindFirstValue(ClaimTypes.NameIdentifier);
+                var picture = result.Principal.FindFirstValue("picture");
 
-        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(name))
-        {
-            Console.WriteLine("Missing user info");
-            return Redirect($"{frontendUrl}/auth-error?message=missing_user_info");
-        }
+                Console.WriteLine($"Email: {email}, Name: {name}, GoogleId: {googleId}");
 
-        var existingUser = await _authService.GetUserByEmailAsync(email);
-        Console.WriteLine($"Existing user: {existingUser != null}");
+                if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(name))
+                {
+                    Console.WriteLine("Missing user info");
+                    return Redirect($"{frontendUrl}/auth-error?message=missing_user_info");
+                }
 
-        object userInfo;
+                var existingUser = await _authService.GetUserByEmailAsync(email);
+                Console.WriteLine($"Existing user: {existingUser != null}");
 
-        if (existingUser != null)
-        {
-            Console.WriteLine("User exists, generating token");
-            var jwtToken = _jwtTokenService.GenerateToken(existingUser);
-            userInfo = new
+                object userInfo;
+
+                if (existingUser != null)
+                {
+                    Console.WriteLine("User exists, generating token");
+                    var jwtToken = _jwtTokenService.GenerateToken(existingUser);
+                    userInfo = new
+                    {
+                        Id = existingUser.Id,
+                        Email = existingUser.Email,
+                        Name = existingUser.Username,
+                        Role = existingUser.Role,
+                        Picture = picture,
+                        Token = jwtToken
+                    };
+                }
+                else
+                {
+                    Console.WriteLine("Creating new user");
+                    var registerRequest = new RegisterRequest
+                    {
+                        Email = email,
+                        Password = Guid.NewGuid().ToString(),
+                        Role = "Student"
+                    };
+
+                    var newUserResponse = await _authService.RegisterAsync(registerRequest);
+                    Console.WriteLine("User registered successfully");
+
+                    userInfo = new
+                    {
+                        Id = newUserResponse.UserId,
+                        Email = email,
+                        Name = name,
+                        Role = "Student",
+                        Picture = picture,
+                        Token = newUserResponse.Token,
+                        IsNewUser = true
+                    };
+                }
+
+                // ניקוי ה-Cookie של Google Authentication אחרי שסיימנו איתו
+                await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+
+                var userJson = JsonSerializer.Serialize(userInfo);
+                var redirectUrl = $"{frontendUrl}/auth-success?user={Uri.EscapeDataString(userJson)}";
+
+                Console.WriteLine($"Redirecting to: {redirectUrl}");
+                Console.WriteLine("=== GoogleCallback Completed Successfully ===");
+
+                return Redirect(redirectUrl);
+            }
+            catch (Exception ex)
             {
-                Id = existingUser.Id,
-                Email = existingUser.Email,
-                Name = existingUser.Username,
-                Role = existingUser.Role,
-                Picture = picture,
-                Token = jwtToken
-            };
-        }
-        else
-        {
-            Console.WriteLine("Creating new user");
-            var registerRequest = new RegisterRequest
-            {
-                Email = email,
-                Password = Guid.NewGuid().ToString(),
-                Role = "Student"
-            };
+                Console.WriteLine($"=== ERROR in GoogleCallback ===");
+                Console.WriteLine($"Message: {ex.Message}");
+                Console.WriteLine($"StackTrace: {ex.StackTrace}");
 
-            var newUserResponse = await _authService.RegisterAsync(registerRequest);
-            Console.WriteLine("User registered successfully");
-            
-            userInfo = new
-            {
-                Id = newUserResponse.UserId,
-                Email = email,
-                Name = name,
-                Role = "Student",
-                Picture = picture,
-                Token = newUserResponse.Token,
-                IsNewUser = true
-            };
-        }
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"Inner Exception: {ex.InnerException.Message}");
+                }
 
-        var userJson = JsonSerializer.Serialize(userInfo);
-        var redirectUrl = $"{frontendUrl}/auth-success?user={Uri.EscapeDataString(userJson)}";
-        
-        Console.WriteLine($"Redirecting to: {redirectUrl}");
-        return Redirect(redirectUrl);
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"=== ERROR in GoogleCallback ===");
-        Console.WriteLine($"Message: {ex.Message}");
-        Console.WriteLine($"StackTrace: {ex.StackTrace}");
-        
-        if (ex.InnerException != null)
-        {
-            Console.WriteLine($"Inner Exception: {ex.InnerException.Message}");
+                return Redirect($"{frontendUrl}/auth-error?message={Uri.EscapeDataString(ex.Message)}");
+            }
         }
-        
-        return Redirect($"{frontendUrl}/auth-error?message={Uri.EscapeDataString(ex.Message)}");
-    }
-}
 
         /// <summary>
         /// Get current user info (works with JWT)
@@ -220,7 +232,7 @@ public async Task<IActionResult> GoogleCallback()
         [HttpPost("google-logout")]
         public async Task<IActionResult> GoogleLogout()
         {
-            await HttpContext.SignOutAsync("GoogleAuth");
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return Ok(new { message = "Logged out successfully" });
         }
     }
