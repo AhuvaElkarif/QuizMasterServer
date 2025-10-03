@@ -1,7 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Authentication;
+﻿using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using QuizMasterServer.Services;
 using System.Security.Claims;
 using System.Text.Json;
@@ -98,8 +99,8 @@ public async Task<IActionResult> GoogleCallback()
     {
         Console.WriteLine("=== GoogleCallback Started ===");
         Console.WriteLine($"Frontend URL: {frontendUrl}");
-
-        var result = await HttpContext.AuthenticateAsync("GoogleAuth");
+                var result = await HttpContext.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                //var result = await HttpContext.AuthenticateAsync("GoogleAuth");
         if (!result.Succeeded)
         {
             Console.WriteLine("Authentication failed");
