@@ -10,8 +10,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
 WORKDIR /app
 COPY --from=build /app .
 
-# ליצור תיקיית keys בתיקייה זמנית שתמיד זמינה
-RUN mkdir -p /tmp/keys && chmod 777 /tmp/keys
+# אין צורך יותר ב-Data Protection keys כי הסרנו Cookie Authentication
 
 EXPOSE 10000
 ENV ASPNETCORE_URLS=http://+:10000

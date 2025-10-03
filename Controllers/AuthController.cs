@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -77,18 +76,22 @@ namespace QuizMasterServer.Controllers
         /// Start Google OAuth login
         /// </summary>
         [HttpGet("google-login")]
-        public IActionResult GoogleLogin()
+        public IActionResult GoogleLogin([FromQuery] string returnUrl = null)
         {
-            var authProps = new AuthenticationProperties
+            var properties = new AuthenticationProperties
             {
                 RedirectUri = Url.Action(nameof(GoogleCallback)),
-                IsPersistent = false
+                Items =
+                {
+                    { "returnUrl", returnUrl ?? "/" }
+                }
             };
-            return Challenge(authProps, GoogleDefaults.AuthenticationScheme);
+
+            return Challenge(properties, GoogleDefaults.AuthenticationScheme);
         }
 
         /// <summary>
-        /// Google OAuth callback
+        /// Google OAuth callback - גרסה מפושטת ללא Cookie dependency
         /// </summary>
         [HttpGet("google-callback")]
         public async Task<IActionResult> GoogleCallback()
@@ -98,51 +101,54 @@ namespace QuizMasterServer.Controllers
             try
             {
                 Console.WriteLine("=== GoogleCallback Started ===");
-                Console.WriteLine($"Frontend URL: {frontendUrl}");
+                Console.WriteLine($"Request Path: {Request.Path}");
                 Console.WriteLine($"Query String: {Request.QueryString}");
+                Console.WriteLine($"Has State: {Request.Query.ContainsKey("state")}");
+                Console.WriteLine($"Has Code: {Request.Query.ContainsKey("code")}");
 
-                // אימות הבקשה מגוגל
-                var result = await HttpContext.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                // ניסיון לאמת את Google
+                var authenticateResult = await HttpContext.AuthenticateAsync(GoogleDefaults.AuthenticationScheme);
 
-                if (!result.Succeeded || result.Principal == null)
+                if (!authenticateResult.Succeeded)
                 {
-                    Console.WriteLine($"Authentication failed. Succeeded: {result.Succeeded}");
-                    if (result.Failure != null)
-                    {
-                        Console.WriteLine($"Failure: {result.Failure.Message}");
-                    }
-                    return Redirect($"{frontendUrl}/auth-error?message=authentication_failed");
+                    Console.WriteLine($"Google Authentication Failed!");
+                    Console.WriteLine($"Failure: {authenticateResult.Failure?.Message}");
+                    return Redirect($"{frontendUrl}/auth-error?message=google_auth_failed");
                 }
 
-                Console.WriteLine("Authentication succeeded");
+                Console.WriteLine("Google Authentication Succeeded!");
 
-                var email = result.Principal.FindFirstValue(ClaimTypes.Email);
-                var name = result.Principal.FindFirstValue(ClaimTypes.Name);
-                var googleId = result.Principal.FindFirstValue(ClaimTypes.NameIdentifier);
-                var picture = result.Principal.FindFirstValue("picture");
+                var claims = authenticateResult.Principal.Claims;
+                var email = claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+                var name = claims.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value;
+                var googleId = claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+                var picture = claims.FirstOrDefault(c => c.Type == "picture")?.Value;
 
-                Console.WriteLine($"Email: {email}, Name: {name}, GoogleId: {googleId}");
+                Console.WriteLine($"Email: {email}");
+                Console.WriteLine($"Name: {name}");
+                Console.WriteLine($"GoogleId: {googleId}");
 
-                if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(name))
+                if (string.IsNullOrEmpty(email))
                 {
-                    Console.WriteLine("Missing user info");
-                    return Redirect($"{frontendUrl}/auth-error?message=missing_user_info");
+                    Console.WriteLine("Missing email claim");
+                    return Redirect($"{frontendUrl}/auth-error?message=missing_email");
                 }
 
+                // בדיקה אם המשתמש קיים
                 var existingUser = await _authService.GetUserByEmailAsync(email);
-                Console.WriteLine($"Existing user: {existingUser != null}");
 
                 object userInfo;
 
                 if (existingUser != null)
                 {
-                    Console.WriteLine("User exists, generating token");
+                    Console.WriteLine($"Existing user found: {existingUser.Id}");
                     var jwtToken = _jwtTokenService.GenerateToken(existingUser);
+
                     userInfo = new
                     {
                         Id = existingUser.Id,
                         Email = existingUser.Email,
-                        Name = existingUser.Username,
+                        Name = existingUser.Username ?? name,
                         Role = existingUser.Role,
                         Picture = picture,
                         Token = jwtToken
@@ -151,15 +157,16 @@ namespace QuizMasterServer.Controllers
                 else
                 {
                     Console.WriteLine("Creating new user");
+
                     var registerRequest = new RegisterRequest
                     {
                         Email = email,
-                        Password = Guid.NewGuid().ToString(),
+                        Password = Guid.NewGuid().ToString(), // סיסמה אקראית
                         Role = "Student"
                     };
 
                     var newUserResponse = await _authService.RegisterAsync(registerRequest);
-                    Console.WriteLine("User registered successfully");
+                    Console.WriteLine($"New user created: {newUserResponse.UserId}");
 
                     userInfo = new
                     {
@@ -173,13 +180,11 @@ namespace QuizMasterServer.Controllers
                     };
                 }
 
-                // ניקוי ה-Cookie של Google Authentication אחרי שסיימנו איתו
-                await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-
                 var userJson = JsonSerializer.Serialize(userInfo);
-                var redirectUrl = $"{frontendUrl}/auth-success?user={Uri.EscapeDataString(userJson)}";
+                var encodedUser = Uri.EscapeDataString(userJson);
+                var redirectUrl = $"{frontendUrl}/auth-success?user={encodedUser}";
 
-                Console.WriteLine($"Redirecting to: {redirectUrl}");
+                Console.WriteLine($"Redirecting to frontend: {redirectUrl.Substring(0, Math.Min(100, redirectUrl.Length))}...");
                 Console.WriteLine("=== GoogleCallback Completed Successfully ===");
 
                 return Redirect(redirectUrl);
@@ -187,6 +192,7 @@ namespace QuizMasterServer.Controllers
             catch (Exception ex)
             {
                 Console.WriteLine($"=== ERROR in GoogleCallback ===");
+                Console.WriteLine($"Type: {ex.GetType().Name}");
                 Console.WriteLine($"Message: {ex.Message}");
                 Console.WriteLine($"StackTrace: {ex.StackTrace}");
 
@@ -195,7 +201,8 @@ namespace QuizMasterServer.Controllers
                     Console.WriteLine($"Inner Exception: {ex.InnerException.Message}");
                 }
 
-                return Redirect($"{frontendUrl}/auth-error?message={Uri.EscapeDataString(ex.Message)}");
+                var errorMessage = Uri.EscapeDataString(ex.Message);
+                return Redirect($"{frontendUrl}/auth-error?message={errorMessage}");
             }
         }
 
@@ -204,7 +211,7 @@ namespace QuizMasterServer.Controllers
         /// </summary>
         [HttpGet("user")]
         [Authorize]
-        public async Task<IActionResult> GetUser()
+        public IActionResult GetUser()
         {
             try
             {
@@ -217,7 +224,7 @@ namespace QuizMasterServer.Controllers
                     Id = userId,
                     Email = email,
                     Role = role,
-                    IsAuthenticated = User.Identity.IsAuthenticated
+                    IsAuthenticated = User.Identity?.IsAuthenticated ?? false
                 });
             }
             catch (Exception ex)
@@ -227,12 +234,11 @@ namespace QuizMasterServer.Controllers
         }
 
         /// <summary>
-        /// Logout (clears Google auth cookie)
+        /// Logout
         /// </summary>
-        [HttpPost("google-logout")]
-        public async Task<IActionResult> GoogleLogout()
+        [HttpPost("logout")]
+        public IActionResult Logout()
         {
-            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return Ok(new { message = "Logged out successfully" });
         }
     }

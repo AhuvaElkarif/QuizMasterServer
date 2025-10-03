@@ -1,18 +1,21 @@
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using QuizMasterServer.Data;
 using QuizMasterServer.Services;
-using System.Security.Claims;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// הגדרה לעבודה מאחורי proxy (Render)
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 var mongoConnection = Environment.GetEnvironmentVariable("MONGODB_CONNECTION")
                       ?? builder.Configuration.GetSection("MongoDbSettings:ConnectionString").Value;
@@ -34,19 +37,7 @@ builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IExamService, ExamService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 
-// תיקון Data Protection - שמירה ב-MongoDB במקום בקובץ
-builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(new DirectoryInfo("/tmp/keys/"))  // שימוש ב-/tmp שתמיד זמין
-    .SetApplicationName("QuizMasterServer")
-    .SetDefaultKeyLifetime(TimeSpan.FromDays(90));
-
-builder.Services.Configure<CookiePolicyOptions>(options =>
-{
-    options.MinimumSameSitePolicy = SameSiteMode.None;
-    options.Secure = CookieSecurePolicy.Always;
-});
-
-// Authentication
+// Authentication - רק JWT + Google (ללא Cookie)
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -70,18 +61,6 @@ builder.Services.AddAuthentication(options =>
         ClockSkew = TimeSpan.Zero
     };
 })
-.AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
-{
-    options.LoginPath = "/api/auth/google-login";
-    options.LogoutPath = "/api/auth/google-logout";
-    options.ExpireTimeSpan = TimeSpan.FromHours(1);
-    options.SlidingExpiration = true;
-    options.Cookie.Name = "QuizMaster.Auth";
-    options.Cookie.SameSite = SameSiteMode.None;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-    options.Cookie.HttpOnly = true;
-    options.Cookie.IsEssential = true;
-})
 .AddGoogle(options =>
 {
     options.ClientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID")
@@ -89,15 +68,13 @@ builder.Services.AddAuthentication(options =>
     options.ClientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET")
                            ?? builder.Configuration["Google:ClientSecret"];
     options.CallbackPath = "/api/auth/google-callback";
-    options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+
+    // Google OAuth יעבוד עם state שנשמר בזיכרון בלבד
     options.SaveTokens = true;
-
-    // חשוב! הגדרות נוספות ל-Google
-    options.CorrelationCookie.SameSite = SameSiteMode.None;
-    options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
-
     options.Scope.Add("email");
     options.Scope.Add("profile");
+
+    // אין צורך ב-SignInScheme כי אנחנו לא משתמשים ב-Cookies
 });
 
 builder.Services.AddAuthorization(options =>
@@ -111,12 +88,12 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "ExamManagementMongoApi", Version = "v1" });
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "QuizMaster API", Version = "v1" });
 
     var securityScheme = new OpenApiSecurityScheme
     {
         Name = "Authorization",
-        Description = "Enter JWT Bearer token **_only_**",
+        Description = "Enter JWT Bearer token",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.Http,
         Scheme = "bearer",
@@ -151,28 +128,18 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// ודא שהתיקייה קיימת
-Directory.CreateDirectory("/tmp/keys/");
+// Configure the HTTP request pipeline
+app.UseSwagger();
+app.UseSwaggerUI();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+// חשוב! ForwardedHeaders לפני כל דבר אחר
+app.UseForwardedHeaders();
 
-app.UseForwardedHeaders(new ForwardedHeadersOptions
-{
-    ForwardedHeaders = ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedFor
-});
-
-app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
 
 app.UseCors();
 
-app.UseCookiePolicy();
 app.UseAuthentication();
 app.UseAuthorization();
 
