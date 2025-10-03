@@ -42,8 +42,6 @@ builder.Services.Configure<CookiePolicyOptions>(options =>
     options.Secure = CookieSecurePolicy.Always;
 });
 
-
-// Authentication - הוספת Google OAuth למערכת הקיימת
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -74,37 +72,27 @@ builder.Services.AddAuthentication(options =>
         ClockSkew = TimeSpan.Zero
     };
 })
-//.AddCookie("GoogleAuth", options =>
-//{
-//    options.LoginPath = "/api/auth/google-login";
-//    options.LogoutPath = "/api/auth/google-logout";
-//    options.ExpireTimeSpan = TimeSpan.FromHours(1);
-//    options.Cookie.SameSite = SameSiteMode.Lax;
-//    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-//})
 .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
 {
     options.LoginPath = "/api/auth/google-login";
     options.LogoutPath = "/api/auth/google-logout";
     options.ExpireTimeSpan = TimeSpan.FromHours(1);
-    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.Cookie.SameSite = SameSiteMode.None; // שונה ל-None כדי לאפשר מעבר דומיינים
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
 })
 .AddGoogle(options =>
- {
-     options.ClientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID")
+{
+    options.ClientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID")
                        ?? builder.Configuration["Google:ClientId"];
-     options.ClientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET")
+    options.ClientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET")
                            ?? builder.Configuration["Google:ClientSecret"];
-     options.CallbackPath = "/api/auth/google-callback";
+    options.CallbackPath = "/api/auth/google-callback";
 
-     // שנה את זה:
-     options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme; // במקום "GoogleAuth"
+    options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
 
-     options.Scope.Add("email");
-     options.Scope.Add("profile");
- });
-
+    options.Scope.Add("email");
+    options.Scope.Add("profile");
+});
 
 builder.Services.AddAuthorization(options =>
 {
@@ -144,7 +132,6 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        // שימוש במשתני סביבה לכתובות מותרות
         var allowedOrigins = Environment.GetEnvironmentVariable("ALLOWED_ORIGINS")?.Split(',')
                            ?? new[] { "http://localhost:3000", "https://quizmastersystem.netlify.app" };
 
@@ -152,7 +139,7 @@ builder.Services.AddCors(options =>
             .WithOrigins(allowedOrigins)
             .AllowAnyMethod()
             .AllowAnyHeader()
-            .AllowCredentials() // חשוב לGoogle OAuth
+            .AllowCredentials()
             .SetPreflightMaxAge(TimeSpan.FromSeconds(3600));
     });
 });
@@ -163,22 +150,27 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
-    //app.UseHttpsRedirection();
 }
 
-app.UseCors();
-
+// קודם ForwardedHeaders
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedFor
 });
-//builder.Services.AddDataProtection()
-//    .PersistKeysToFileSystem(new DirectoryInfo("/tmp/keys"))
-//    .SetApplicationName("QuizMasterServer");
 
+// Redirect ל-HTTPS
+app.UseHttpsRedirection();
+
+// CORS
+app.UseCors();
+
+// Cookie Policy
+app.UseCookiePolicy();
+
+// Authentication + Authorization
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseHttpsRedirection();
+
 app.MapControllers();
-app.UseCookiePolicy();
+
 app.Run();
