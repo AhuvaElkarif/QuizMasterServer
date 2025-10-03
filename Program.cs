@@ -67,38 +67,37 @@ builder.Services.AddAuthentication(options =>
         ClockSkew = TimeSpan.Zero
     };
 })
-.AddCookie("GoogleAuth", options =>
+//.AddCookie("GoogleAuth", options =>
+//{
+//    options.LoginPath = "/api/auth/google-login";
+//    options.LogoutPath = "/api/auth/google-logout";
+//    options.ExpireTimeSpan = TimeSpan.FromHours(1);
+//    options.Cookie.SameSite = SameSiteMode.Lax;
+//    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+//})
+.AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
 {
     options.LoginPath = "/api/auth/google-login";
     options.LogoutPath = "/api/auth/google-logout";
     options.ExpireTimeSpan = TimeSpan.FromHours(1);
-    options.Cookie.SameSite = SameSiteMode.Lax; 
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always; 
+    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
 })
 .AddGoogle(options =>
-{
-    options.ClientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID")
-                      ?? builder.Configuration["Google:ClientId"];
-    options.ClientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET")
-                          ?? builder.Configuration["Google:ClientSecret"];
+ {
+     options.ClientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID")
+                       ?? builder.Configuration["Google:ClientId"];
+     options.ClientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET")
+                           ?? builder.Configuration["Google:ClientSecret"];
+     options.CallbackPath = "/api/auth/google-callback";
 
-    // תקן את ה-CallbackPath להיות בדיוק כמו ה-Route בcontroller
-    options.CallbackPath = "/api/auth/google-callback"; // case sensitive!
-    options.SignInScheme = "GoogleAuth";
+     // שנה את זה:
+     options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme; // במקום "GoogleAuth"
 
-    // הסר את זה - זה גורם לבעיות
-    /*
-    options.Events.OnRedirectToAuthorizationEndpoint = context =>
-    {
-        var redirectUri = context.RedirectUri.Replace("http://", "https://");
-        context.Response.Redirect(redirectUri);
-        return Task.CompletedTask;
-    };
-    */
+     options.Scope.Add("email");
+     options.Scope.Add("profile");
+ });
 
-    options.Scope.Add("email");
-    options.Scope.Add("profile");
-});
 
 builder.Services.AddAuthorization(options =>
 {
