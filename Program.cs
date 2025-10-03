@@ -26,10 +26,6 @@ builder.Services.Configure<MongoDbSettings>(options =>
     options.DatabaseName = mongoDatabase;
 });
 
-builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(new DirectoryInfo(@"/app/keys/"))
-    .SetApplicationName("QuizMasterServer");
-
 builder.Services.AddScoped<IMongoDbContext, MongoDbContext>();
 builder.Services.AddScoped<IQuestionService, QuestionService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -37,6 +33,10 @@ builder.Services.AddScoped<IResultService, ResultService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IExamService, ExamService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(@"/app/keys/"))
+    .SetApplicationName("QuizMasterServer");
 
 builder.Services.Configure<CookiePolicyOptions>(options =>
 {
@@ -73,7 +73,7 @@ builder.Services.AddAuthentication(options =>
     options.LoginPath = "/api/auth/google-login";
     options.LogoutPath = "/api/auth/google-logout";
     options.ExpireTimeSpan = TimeSpan.FromHours(1);
-    options.Cookie.SameSite = SameSiteMode.None;   // שינוי ל-None
+    options.Cookie.SameSite = SameSiteMode.None;   
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
 })
 .AddGoogle(options =>
