@@ -36,6 +36,13 @@ builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IExamService, ExamService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 
+builder.Services.Configure<CookiePolicyOptions>(options =>
+{
+    options.MinimumSameSitePolicy = SameSiteMode.None;
+    options.Secure = CookieSecurePolicy.Always;
+});
+
+
 // Authentication - הוספת Google OAuth למערכת הקיימת
 builder.Services.AddAuthentication(options =>
 {
@@ -163,16 +170,15 @@ app.UseCors();
 
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+    ForwardedHeaders = ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedFor
 });
-
 //builder.Services.AddDataProtection()
 //    .PersistKeysToFileSystem(new DirectoryInfo("/tmp/keys"))
 //    .SetApplicationName("QuizMasterServer");
 
 app.UseAuthentication();
 app.UseAuthorization();
-
+app.UseHttpsRedirection();
 app.MapControllers();
-
+app.UseCookiePolicy();
 app.Run();
