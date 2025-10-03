@@ -92,31 +92,44 @@ namespace QuizMasterServer.Controllers
         [HttpGet("google-callback")]
         public async Task<IActionResult> GoogleCallback()
         {
+            var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "https://quizmastersystem.netlify.app";
+
             try
             {
+                Console.WriteLine("=== GoogleCallback Started ===");
+                Console.WriteLine($"Frontend URL: {frontendUrl}");
+
                 var result = await HttpContext.AuthenticateAsync("GoogleAuth");
                 if (!result.Succeeded)
                 {
-                    Console.WriteLine("Google authentication failed");
-                    return BadRequest("Google authentication failed");
+                    Console.WriteLine("Authentication failed");
+                    return Redirect($"{frontendUrl}/auth-error?message=authentication_failed");
                 }
+
+                Console.WriteLine("Authentication succeeded");
 
                 var email = result.Principal.FindFirstValue(ClaimTypes.Email);
                 var name = result.Principal.FindFirstValue(ClaimTypes.Name);
                 var googleId = result.Principal.FindFirstValue(ClaimTypes.NameIdentifier);
                 var picture = result.Principal.FindFirstValue("picture");
 
+                Console.WriteLine($"Email: {email}, Name: {name}");
+
                 if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(name))
-                    return BadRequest("Could not retrieve user information from Google");
+                {
+                    Console.WriteLine("Missing user info");
+                    return Redirect($"{frontendUrl}/auth-error?message=missing_user_info");
+                }
 
                 var existingUser = await _authService.GetUserByEmailAsync(email);
+                Console.WriteLine($"Existing user: {existingUser != null}");
 
-                string jwtToken;
                 object userInfo;
 
                 if (existingUser != null)
                 {
-                    jwtToken = _jwtTokenService.GenerateToken(existingUser);
+                    Console.WriteLine("User exists, generating token");
+                    var jwtToken = _jwtTokenService.GenerateToken(existingUser);
                     userInfo = new
                     {
                         Id = existingUser.Id,
@@ -129,14 +142,18 @@ namespace QuizMasterServer.Controllers
                 }
                 else
                 {
+                    Console.WriteLine("Creating new user");
                     var registerRequest = new RegisterRequest
                     {
+                        Username = name,
                         Email = email,
-                        Password = Guid.NewGuid().ToString(), // סיסמה רנדומלית
-                        Role = "Student" // ברירת מחדל
+                        Password = Guid.NewGuid().ToString(),
+                        Role = "Student"
                     };
 
                     var newUserResponse = await _authService.RegisterAsync(registerRequest);
+                    Console.WriteLine("User registered successfully");
+
                     userInfo = new
                     {
                         Id = newUserResponse.UserId,
@@ -149,8 +166,6 @@ namespace QuizMasterServer.Controllers
                     };
                 }
 
-                var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "http://localhost:3000";
-                Console.WriteLine($"Frontend URL: {frontendUrl}");
                 var userJson = JsonSerializer.Serialize(userInfo);
                 var redirectUrl = $"{frontendUrl}/auth-success?user={Uri.EscapeDataString(userJson)}";
 
@@ -159,9 +174,16 @@ namespace QuizMasterServer.Controllers
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error in GoogleCallback: {ex.Message}");
-                var errorUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "http://localhost:3000";
-                return Redirect($"{errorUrl}/auth-error?message={Uri.EscapeDataString(ex.Message)}");
+                Console.WriteLine($"=== ERROR in GoogleCallback ===");
+                Console.WriteLine($"Message: {ex.Message}");
+                Console.WriteLine($"StackTrace: {ex.StackTrace}");
+
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"Inner Exception: {ex.InnerException.Message}");
+                }
+
+                return Redirect($"{frontendUrl}/auth-error?message={Uri.EscapeDataString(ex.Message)}");
             }
         }
 
