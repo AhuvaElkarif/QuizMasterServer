@@ -106,8 +106,8 @@ namespace QuizMasterServer.Controllers
                 Console.WriteLine($"Has State: {Request.Query.ContainsKey("state")}");
                 Console.WriteLine($"Has Code: {Request.Query.ContainsKey("code")}");
 
-                // ניסיון לאמת את Google
-                var authenticateResult = await HttpContext.AuthenticateAsync(GoogleDefaults.AuthenticationScheme);
+                // ניסיון לאמת מול Google דרך ה-Cookie scheme
+                var authenticateResult = await HttpContext.AuthenticateAsync("Cookies");
 
                 if (!authenticateResult.Succeeded)
                 {

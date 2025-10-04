@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -37,11 +38,17 @@ builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IExamService, ExamService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 
-// Authentication - רק JWT + Google (ללא Cookie)
+// Data Protection for Google OAuth state
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo("/tmp/keys"))
+    .SetApplicationName("QuizMasterServer");
+
+// Authentication - JWT + Cookie (רק ל-Google OAuth) + Google
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultSignInScheme = "Cookies"; // נדרש ל-Google OAuth
 })
 .AddJwtBearer(opt =>
 {
@@ -61,6 +68,15 @@ builder.Services.AddAuthentication(options =>
         ClockSkew = TimeSpan.Zero
     };
 })
+.AddCookie("Cookies", options =>
+{
+    // Cookie זה משמש רק לשמירת state של Google OAuth, לא למשתמשים
+    options.ExpireTimeSpan = TimeSpan.FromMinutes(5);
+    options.Cookie.Name = "QuizMaster.GoogleAuth";
+    options.Cookie.SameSite = SameSiteMode.Lax; // שינוי ל-Lax
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.HttpOnly = true;
+})
 .AddGoogle(options =>
 {
     options.ClientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID")
@@ -68,13 +84,14 @@ builder.Services.AddAuthentication(options =>
     options.ClientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET")
                            ?? builder.Configuration["Google:ClientSecret"];
     options.CallbackPath = "/api/auth/google-callback";
-
-    // Google OAuth יעבוד עם state שנשמר בזיכרון בלבד
+    options.SignInScheme = "Cookies"; // חובה!
     options.SaveTokens = true;
     options.Scope.Add("email");
     options.Scope.Add("profile");
 
-    // אין צורך ב-SignInScheme כי אנחנו לא משתמשים ב-Cookies
+    // הגדרות ל-state cookie
+    options.CorrelationCookie.SameSite = SameSiteMode.Lax;
+    options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
 });
 
 builder.Services.AddAuthorization(options =>
