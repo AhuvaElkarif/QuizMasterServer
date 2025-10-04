@@ -11,7 +11,6 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// הגדרה לעבודה מאחורי proxy (Render)
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
@@ -49,7 +48,7 @@ builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultSignInScheme = "Cookies"; // נדרש ל-Google OAuth
+    options.DefaultSignInScheme = "Cookies"; 
 })
 .AddJwtBearer(opt =>
 {
@@ -71,19 +70,16 @@ builder.Services.AddAuthentication(options =>
 })
 .AddCookie("Cookies", options =>
 {
-    // Cookie זה משמש רק לשמירת state של Google OAuth
     options.ExpireTimeSpan = TimeSpan.FromMinutes(5);
     options.Cookie.Name = "QuizMaster.GoogleAuth";
     options.Cookie.SameSite = SameSiteMode.Lax;
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
     options.Cookie.HttpOnly = true;
 
-    // חשוב! למנוע redirects אוטומטיים
     options.Events = new CookieAuthenticationEvents
     {
         OnRedirectToReturnUrl = context =>
         {
-            // לא לעשות שום redirect - הקוד שלנו יטפל בזה
             return Task.CompletedTask;
         },
         OnRedirectToAccessDenied = context =>
@@ -109,12 +105,11 @@ builder.Services.AddAuthentication(options =>
     options.ClientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET")
                            ?? builder.Configuration["Google:ClientSecret"];
     options.CallbackPath = "/api/auth/google-callback";
-    options.SignInScheme = "Cookies"; // חובה!
+    options.SignInScheme = "Cookies"; 
     options.SaveTokens = true;
     options.Scope.Add("email");
     options.Scope.Add("profile");
 
-    // הגדרות ל-state cookie
     options.CorrelationCookie.SameSite = SameSiteMode.Lax;
     options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
 });
@@ -170,11 +165,9 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// חשוב! ForwardedHeaders לפני כל דבר אחר
 app.UseForwardedHeaders();
 
 app.UseStaticFiles();

@@ -80,7 +80,7 @@ namespace QuizMasterServer.Controllers
         {
             var properties = new AuthenticationProperties
             {
-                RedirectUri = "/api/auth/google-response", // נתיב אחר!
+                RedirectUri = "/api/auth/google-response",
                 IsPersistent = false
             };
             return Challenge(properties, GoogleDefaults.AuthenticationScheme);
