@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
@@ -70,12 +71,36 @@ builder.Services.AddAuthentication(options =>
 })
 .AddCookie("Cookies", options =>
 {
-    // Cookie זה משמש רק לשמירת state של Google OAuth, לא למשתמשים
+    // Cookie זה משמש רק לשמירת state של Google OAuth
     options.ExpireTimeSpan = TimeSpan.FromMinutes(5);
     options.Cookie.Name = "QuizMaster.GoogleAuth";
-    options.Cookie.SameSite = SameSiteMode.Lax; // שינוי ל-Lax
+    options.Cookie.SameSite = SameSiteMode.Lax;
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
     options.Cookie.HttpOnly = true;
+
+    // חשוב! למנוע redirects אוטומטיים
+    options.Events = new CookieAuthenticationEvents
+    {
+        OnRedirectToReturnUrl = context =>
+        {
+            // לא לעשות שום redirect - הקוד שלנו יטפל בזה
+            return Task.CompletedTask;
+        },
+        OnRedirectToAccessDenied = context =>
+        {
+            context.Response.StatusCode = 403;
+            return Task.CompletedTask;
+        },
+        OnRedirectToLogin = context =>
+        {
+            context.Response.StatusCode = 401;
+            return Task.CompletedTask;
+        },
+        OnRedirectToLogout = context =>
+        {
+            return Task.CompletedTask;
+        }
+    };
 })
 .AddGoogle(options =>
 {

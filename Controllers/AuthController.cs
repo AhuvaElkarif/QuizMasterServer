@@ -91,7 +91,7 @@ namespace QuizMasterServer.Controllers
         }
 
         /// <summary>
-        /// Google OAuth callback - גרסה מפושטת ללא Cookie dependency
+        /// Google OAuth callback
         /// </summary>
         [HttpGet("google-callback")]
         public async Task<IActionResult> GoogleCallback()
@@ -103,20 +103,28 @@ namespace QuizMasterServer.Controllers
                 Console.WriteLine("=== GoogleCallback Started ===");
                 Console.WriteLine($"Request Path: {Request.Path}");
                 Console.WriteLine($"Query String: {Request.QueryString}");
-                Console.WriteLine($"Has State: {Request.Query.ContainsKey("state")}");
-                Console.WriteLine($"Has Code: {Request.Query.ContainsKey("code")}");
 
-                // ניסיון לאמת מול Google דרך ה-Cookie scheme
+                // בדיקה אם יש state וcode בפרמטרים
+                if (!Request.Query.ContainsKey("state") || !Request.Query.ContainsKey("code"))
+                {
+                    Console.WriteLine("Missing state or code parameter - likely a redirect loop");
+                    return Redirect($"{frontendUrl}/auth-error?message=invalid_callback");
+                }
+
+                Console.WriteLine($"Has State: True");
+                Console.WriteLine($"Has Code: True");
+
+                // אימות מול Google - נעשה דרך ה-Cookie scheme שהוא ה-SignInScheme
                 var authenticateResult = await HttpContext.AuthenticateAsync("Cookies");
 
                 if (!authenticateResult.Succeeded)
                 {
-                    Console.WriteLine($"Google Authentication Failed!");
+                    Console.WriteLine($"Cookie Authentication Failed!");
                     Console.WriteLine($"Failure: {authenticateResult.Failure?.Message}");
-                    return Redirect($"{frontendUrl}/auth-error?message=google_auth_failed");
+                    return Redirect($"{frontendUrl}/auth-error?message=auth_failed");
                 }
 
-                Console.WriteLine("Google Authentication Succeeded!");
+                Console.WriteLine("Authentication Succeeded!");
 
                 var claims = authenticateResult.Principal.Claims;
                 var email = claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
@@ -131,6 +139,7 @@ namespace QuizMasterServer.Controllers
                 if (string.IsNullOrEmpty(email))
                 {
                     Console.WriteLine("Missing email claim");
+                    await HttpContext.SignOutAsync("Cookies");
                     return Redirect($"{frontendUrl}/auth-error?message=missing_email");
                 }
 
@@ -161,7 +170,7 @@ namespace QuizMasterServer.Controllers
                     var registerRequest = new RegisterRequest
                     {
                         Email = email,
-                        Password = Guid.NewGuid().ToString(), // סיסמה אקראית
+                        Password = Guid.NewGuid().ToString(),
                         Role = "Student"
                     };
 
@@ -180,11 +189,14 @@ namespace QuizMasterServer.Controllers
                     };
                 }
 
+                // חשוב מאוד! ניקוי ה-Cookie מיד אחרי שסיימנו
+                await HttpContext.SignOutAsync("Cookies");
+
                 var userJson = JsonSerializer.Serialize(userInfo);
                 var encodedUser = Uri.EscapeDataString(userJson);
                 var redirectUrl = $"{frontendUrl}/auth-success?user={encodedUser}";
 
-                Console.WriteLine($"Redirecting to frontend: {redirectUrl.Substring(0, Math.Min(100, redirectUrl.Length))}...");
+                Console.WriteLine($"User data prepared, redirecting to frontend");
                 Console.WriteLine("=== GoogleCallback Completed Successfully ===");
 
                 return Redirect(redirectUrl);
@@ -200,6 +212,13 @@ namespace QuizMasterServer.Controllers
                 {
                     Console.WriteLine($"Inner Exception: {ex.InnerException.Message}");
                 }
+
+                // ניקוי Cookie גם במקרה של שגיאה
+                try
+                {
+                    await HttpContext.SignOutAsync("Cookies");
+                }
+                catch { }
 
                 var errorMessage = Uri.EscapeDataString(ex.Message);
                 return Redirect($"{frontendUrl}/auth-error?message={errorMessage}");
